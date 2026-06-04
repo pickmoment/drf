@@ -264,7 +264,7 @@ func renderPreviewPanel(lines []string, scroll, hScroll int, wrap, lineNumbers b
 	var visibleLines []string
 	for i := scroll; i < len(lines) && len(visibleLines) < innerH; i++ {
 		rawLine := lines[i]
-		plain := expandTabs(stripANSI(rawLine), 4)
+		plain := sanitizeControlChars(expandTabs(stripANSI(rawLine), 4))
 
 		var rendered []string
 		isANSI := strings.Contains(rawLine, "\x1b")
@@ -1105,6 +1105,22 @@ func stripANSI(s string) string {
 		} else {
 			b.WriteByte(s[i])
 			i++
+		}
+	}
+	return b.String()
+}
+
+// sanitizeControlChars removes C0 control characters that could affect terminal rendering.
+// Keeps printable characters and tab (which expandTabs has already handled).
+func sanitizeControlChars(s string) string {
+	if !strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 && r != '\t' }) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= 0x20 || r == '\t' {
+			b.WriteRune(r)
 		}
 	}
 	return b.String()

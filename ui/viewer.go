@@ -142,7 +142,7 @@ func renderTextFile(lines []string, scroll, hScroll int, wrap, lineNumbers bool,
 	lineNum := scroll
 	for lineNum < len(lines) && len(visible) < h {
 		rawLine := lines[lineNum]
-		plain := expandTabs(stripANSI(rawLine), 4)
+		plain := sanitizeControlChars(expandTabs(stripANSI(rawLine), 4))
 		isMatch := matchSet[lineNum]
 
 		isANSI := strings.Contains(rawLine, "\x1b")

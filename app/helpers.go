@@ -431,7 +431,38 @@ func readFileCapped(path string, maxSize int64) (string, error) {
 	if int64(n) > maxSize {
 		data = buf[:maxSize]
 	}
-	return string(data), nil
+	return decodeBOM(data), nil
+}
+
+// decodeBOM converts BOM-prefixed byte slices to UTF-8 strings and normalizes line endings.
+// Handles UTF-16 LE (FF FE), UTF-16 BE (FE FF), and UTF-8 BOM (EF BB BF).
+func decodeBOM(data []byte) string {
+	var s string
+	switch {
+	case len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe:
+		// UTF-16 LE BOM
+		out := make([]rune, 0, len(data)/2)
+		for i := 2; i+1 < len(data); i += 2 {
+			r := rune(uint16(data[i]) | uint16(data[i+1])<<8)
+			out = append(out, r)
+		}
+		s = string(out)
+	case len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff:
+		// UTF-16 BE BOM
+		out := make([]rune, 0, len(data)/2)
+		for i := 2; i+1 < len(data); i += 2 {
+			r := rune(uint16(data[i])<<8 | uint16(data[i+1]))
+			out = append(out, r)
+		}
+		s = string(out)
+	case len(data) >= 3 && data[0] == 0xef && data[1] == 0xbb && data[2] == 0xbf:
+		// UTF-8 BOM
+		s = string(data[3:])
+	default:
+		s = string(data)
+	}
+	// Normalize CRLF → LF so \r never reaches the terminal renderer.
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 // loadPreviewForSelected loads preview content for the selected file (preview panel).
