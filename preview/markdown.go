@@ -104,7 +104,15 @@ func RenderMarkdown(src string, maxWidth int) []string {
 
 		// Blockquote
 		if strings.HasPrefix(line, "> ") {
-			result = append(result, "\x1b[2m│ "+renderInline(strings.TrimPrefix(line, "> "))+"\x1b[0m")
+			text := strings.TrimPrefix(line, "> ")
+			const prefixW = 2 // "│ " visual width
+			if maxWidth > prefixW+1 {
+				for _, wl := range wordWrapText(text, maxWidth-prefixW) {
+					result = append(result, "\x1b[2m│ \x1b[0m"+renderInline(wl))
+				}
+			} else {
+				result = append(result, "\x1b[2m│ "+renderInline(text)+"\x1b[0m")
+			}
 			continue
 		}
 
