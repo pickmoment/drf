@@ -3,11 +3,22 @@ package app
 import (
 	"time"
 
+	"github.com/pickmoment/drf/git"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // tickMsg is sent on every tick (100ms) for status expiry and async polling.
 type tickMsg struct{}
+
+// editorFinishedMsg is sent when a terminal editor process exits.
+type editorFinishedMsg struct{ err error }
+
+// gitStatusMsg is sent when the async git status refresh completes.
+type gitStatusMsg struct {
+	status *git.GitStatus
+	dir    string
+}
 
 func tickCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
@@ -45,6 +56,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.SetStatusError("편집기 오류: " + msg.err.Error())
+		}
+		return tickCmd()
+
+	case gitStatusMsg:
+		if m.Git != nil && msg.dir == m.CurrentDir {
+			m.Git.Status = msg.status
+			if msg.status != nil {
+				if m.Git.StagedIdx >= len(msg.status.Staged) {
+					m.Git.StagedIdx = max(0, len(msg.status.Staged)-1)
+				}
+				if m.Git.UnstagedIdx >= len(msg.status.Unstaged) {
+					m.Git.UnstagedIdx = max(0, len(msg.status.Unstaged)-1)
+				}
+			}
+		}
+		return nil
+
 	case tea.MouseMsg:
 		m.handleMouse(tea.MouseEvent(msg))
 		return nil
@@ -71,6 +102,8 @@ func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {
 		return m.handleKeyViewer(key)
 	case ModePathClipboard:
 		return m.handleKeyClipboardPanel(key)
+	case ModeOpenChoice:
+		return m.handleKeyOpenChoice(key)
 	case ModeOpenWith:
 		return m.handleKeyOpenWith(key)
 	case ModeSettings:

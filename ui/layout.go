@@ -325,21 +325,27 @@ func renderPreviewPanel(lines []string, scroll, hScroll int, wrap, lineNumbers b
 }
 
 // RenderTabBar renders a path bar at the top with git branch and file count.
-func RenderTabBar(currentDir, gitBranch string, fileCount, width int) string {
+func RenderTabBar(currentDir, gitBranch string, gitDirty bool, fileCount, width int) string {
 	bg := lipgloss.Color("236")
 	logoStyle := lipgloss.NewStyle().Background(lipgloss.Color("27")).Foreground(lipgloss.Color("255")).Bold(true)
 	sepStyle := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("244"))
 	pathStyle := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("252"))
 	branchStyle := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("114"))
+	dirtyStyle := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("208"))
 	countStyle := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("244"))
 
 	logo := logoStyle.Render(" drf ")
 	sep := sepStyle.Render(" │ ")
 
-	// Right section: branch + count
+	// Right section: branch + dirty indicator + count
 	right := ""
 	if gitBranch != "" {
-		right += "  " + branchStyle.Render("⎇ "+gitBranch)
+		branch := "⎇ " + gitBranch
+		if gitDirty {
+			right += "  " + branchStyle.Render(branch) + dirtyStyle.Render(" ●")
+		} else {
+			right += "  " + branchStyle.Render(branch)
+		}
 	}
 	if fileCount >= 0 {
 		right += "  " + countStyle.Render(fmt.Sprintf("%d 파일", fileCount))
@@ -464,6 +470,44 @@ func RenderPaletteOverlay(query string, results []string, selectedIdx, w, h int)
 	return style.Render(sb.String())
 }
 
+// RenderOpenChoiceOverlay renders the open-choice modal (Enter key on files/dirs).
+func RenderOpenChoiceOverlay(selectedIdx int, isDir bool, filename string, w, h int) string {
+	innerW := 36
+	if innerW > w-4 {
+		innerW = w - 4
+	}
+
+	items := []string{"기본 앱으로 열기", "VS Code로 열기"}
+
+	var sb strings.Builder
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Render("파일 열기"))
+	sb.WriteString("\n")
+	sb.WriteString(lipgloss.NewStyle().Faint(true).Render(truncateStr(filename, innerW)))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", innerW))
+	sb.WriteString("\n")
+
+	for i, item := range items {
+		label := padRight(truncateStr(item, innerW), innerW)
+		if i == selectedIdx {
+			sb.WriteString(lipgloss.NewStyle().Background(ColorSelected).Render(label))
+		} else {
+			sb.WriteString(label)
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: 선택  Esc: 취소"))
+
+	style := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBorderFocused).
+		Padding(0, 1).
+		Width(innerW + 2)
+	return style.Render(sb.String())
+}
+
 // RenderOpenWithOverlay renders the "open with" selection modal.
 func RenderOpenWithOverlay(items []string, selectedIdx int, filename string, w, h int) string {
 	innerW := 44
@@ -549,9 +593,13 @@ func RenderPathClipboardOverlay(items []string, selectedIdx, w, h int) string {
 	return style.Render(sb.String())
 }
 
-// PlaceOverlay centers a modal over a base view using ANSI cursor positioning.
+// PlaceOverlay centers a modal over a base view by directly replacing characters
+// in the appropriate lines. This works correctly with bubbletea's renderer which
+// truncates lines at terminal width, stripping any appended ANSI cursor sequences.
 func PlaceOverlay(base, modal string, w, h int) string {
+	baseLines := strings.Split(base, "\n")
 	modalLines := strings.Split(modal, "\n")
+
 	oh := len(modalLines)
 	ow := 0
 	for _, l := range modalLines {
@@ -560,6 +608,7 @@ func PlaceOverlay(base, modal string, w, h int) string {
 			ow = lw
 		}
 	}
+
 	startY := (h - oh) / 2
 	startX := (w - ow) / 2
 	if startX < 0 {
@@ -569,11 +618,72 @@ func PlaceOverlay(base, modal string, w, h int) string {
 		startY = 0
 	}
 
+	for i, modalLine := range modalLines {
+		baseIdx := startY + i
+		if baseIdx < 0 || baseIdx >= len(baseLines) {
+			continue
+		}
+		left := overlayLeft(baseLines[baseIdx], startX)
+		right := hScrollANSI(baseLines[baseIdx], startX+ow)
+		baseLines[baseIdx] = left + modalLine + right
+	}
+
+	return strings.Join(baseLines, "\n")
+}
+
+// overlayLeft returns the first maxW visual columns of an ANSI-decorated string,
+// padding with spaces to exactly maxW columns and closing with a reset.
+func overlayLeft(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	type tok struct {
+		ansi string
+		r    rune
+		w    int
+	}
+	var toks []tok
+	i, pending := 0, ""
+	for i < len(s) {
+		if i+1 < len(s) && s[i] == '\x1b' && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			if j < len(s) {
+				j++
+			}
+			pending += s[i:j]
+			i = j
+			continue
+		}
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && sz == 1 {
+			i++
+			continue
+		}
+		toks = append(toks, tok{ansi: pending, r: r, w: runewidth.RuneWidth(r)})
+		pending = ""
+		i += sz
+	}
+
+	col := 0
 	var b strings.Builder
-	b.WriteString(base)
-	for i, line := range modalLines {
-		b.WriteString(fmt.Sprintf("\x1b[%d;%dH", startY+i+1, startX+1))
-		b.WriteString(line)
+	for _, t := range toks {
+		if col+t.w > maxW {
+			break
+		}
+		b.WriteString(t.ansi)
+		b.WriteRune(t.r)
+		col += t.w
+	}
+	// Pad to exactly maxW if short
+	for col < maxW {
+		b.WriteByte(' ')
+		col++
+	}
+	if b.Len() > 0 {
+		b.WriteString("\x1b[0m")
 	}
 	return b.String()
 }

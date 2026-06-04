@@ -87,51 +87,34 @@ func GetStatus(dir string) *GitStatus {
 		return nil
 	}
 
-	branch, _ := run(root, "branch", "--show-current")
-	if branch == "" {
-		branch = "HEAD"
-	}
-
-	porcelain, err := run(root, "-c", "core.quotepath=false", "status", "--porcelain=v1", "-u")
+	// Single call: porcelain v2 + branch gives branch, upstream, ahead/behind, and file statuses.
+	raw, err := run(root, "-c", "core.quotepath=false", "status", "--porcelain=v2", "--branch", "-u")
 	if err != nil {
 		return nil
 	}
 
 	st := &GitStatus{
-		Branch:  branch,
+		Branch:  "HEAD",
 		Root:    root,
 		FileMap: make(map[string][2]byte),
 	}
 
-	for _, line := range strings.Split(porcelain, "\n") {
-		if len(line) < 3 {
+	for _, line := range strings.Split(raw, "\n") {
+		if line == "" {
 			continue
 		}
-		x := line[0]
-		y := line[1]
-		rawPath := line[3:]
-		path := rawPath
-		if idx := strings.Index(rawPath, " -> "); idx != -1 {
-			path = rawPath[idx+4:]
-		}
-		st.FileMap[path] = [2]byte{x, y}
-		if x != ' ' && x != '?' {
-			st.Staged = append(st.Staged, GitFile{Path: path, X: x, Y: y})
-		}
-		if y != ' ' || (x == '?' && y == '?') {
-			st.Unstaged = append(st.Unstaged, GitFile{Path: path, X: x, Y: y})
-		}
-	}
-
-	branchInfo, _ := run(root, "status", "--porcelain=v2", "--branch")
-	for _, line := range strings.Split(branchInfo, "\n") {
-		if rest, ok := strings.CutPrefix(line, "# branch.upstream "); ok {
-			u := strings.TrimSpace(rest)
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			if b := strings.TrimPrefix(line, "# branch.head "); b != "(detached)" {
+				st.Branch = b
+			}
+		case strings.HasPrefix(line, "# branch.upstream "):
+			u := strings.TrimPrefix(line, "# branch.upstream ")
 			if u != "(null)" {
 				st.Upstream = u
 			}
-		} else if rest, ok := strings.CutPrefix(line, "# branch.ab "); ok {
-			parts := strings.Fields(rest)
+		case strings.HasPrefix(line, "# branch.ab "):
+			parts := strings.Fields(strings.TrimPrefix(line, "# branch.ab "))
 			if len(parts) >= 2 {
 				if a, err := strconv.Atoi(parts[0][1:]); err == nil {
 					st.Ahead = a
@@ -140,6 +123,34 @@ func GetStatus(dir string) *GitStatus {
 					st.Behind = b
 				}
 			}
+		case line[0] == '1' || line[0] == '2': // ordinary or renamed
+			if len(line) < 5 {
+				continue
+			}
+			x, y := line[2], line[3]
+			// path is after 8 space-separated fields
+			fields := strings.SplitN(line, " ", 9)
+			if len(fields) < 9 {
+				continue
+			}
+			path := fields[8]
+			// for renames "origPath\tnewPath" — take destination
+			if line[0] == '2' {
+				if idx := strings.Index(path, "\t"); idx != -1 {
+					path = path[idx+1:]
+				}
+			}
+			st.FileMap[path] = [2]byte{x, y}
+			if x != '.' && x != '?' {
+				st.Staged = append(st.Staged, GitFile{Path: path, X: x, Y: y})
+			}
+			if y != '.' {
+				st.Unstaged = append(st.Unstaged, GitFile{Path: path, X: x, Y: y})
+			}
+		case line[0] == '?': // untracked
+			path := strings.TrimPrefix(line, "? ")
+			st.FileMap[path] = [2]byte{'?', '?'}
+			st.Unstaged = append(st.Unstaged, GitFile{Path: path, X: '?', Y: '?'})
 		}
 	}
 

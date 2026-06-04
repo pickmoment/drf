@@ -21,6 +21,7 @@ const (
 	ModeGit
 	ModeFileManager
 	ModePathClipboard
+	ModeOpenChoice
 )
 
 type FocusedPanel int
@@ -125,6 +126,9 @@ type Model struct {
 	ViewerPrevKeyG      bool
 
 	OpenWithIndex int
+
+	OpenChoiceIndex int
+	OpenChoiceIsDir bool
 
 	FmMenuIdx         int
 	FmInput           string

@@ -52,36 +52,39 @@ func (m *Model) handleKeyFileList(key tea.KeyMsg) tea.Cmd {
 		m.loadPreviewForSelected()
 	case tea.KeyEnter:
 		if m.FocusedPanel == PanelBookmarks {
-			m.navigateToBookmark()
+			cmd := m.navigateToBookmark()
 			m.loadPreviewForSelected()
-			return nil
+			return cmd
 		}
 		if m.FocusedPanel == PanelPathClipboard {
 			if m.PathClipboardIdx < len(m.PathClipboard) {
-				m.navigateTo(m.PathClipboard[m.PathClipboardIdx])
+				cmd := m.navigateTo(m.PathClipboard[m.PathClipboardIdx])
 				m.loadPreviewForSelected()
+				return cmd
 			}
 			return nil
 		}
 		return m.enterOrOpen()
 	case tea.KeyLeft:
-		m.goParent()
+		cmd := m.goParent()
 		m.loadPreviewForSelected()
+		return cmd
 	case tea.KeyRight:
 		if m.FocusedPanel == PanelFileList {
 			entry := m.SelectedEntry()
 			if entry != nil {
 				if entry.IsDir {
-					m.navigateTo(entry.Path)
+					cmd := m.navigateTo(entry.Path)
 					m.loadPreviewForSelected()
-				} else {
-					return m.openInViewer(entry.Path)
+					return cmd
 				}
+				return m.openInViewer(entry.Path)
 			}
 		}
 	case tea.KeyBackspace:
-		m.goParent()
+		cmd := m.goParent()
 		m.loadPreviewForSelected()
+		return cmd
 	case tea.KeyTab:
 		// Cycle focus
 		switch m.FocusedPanel {
@@ -187,18 +190,18 @@ func (m *Model) handleKeyFileListRunes(key tea.KeyMsg) tea.Cmd {
 			}
 			return nil
 		case 'h':
-			m.goParent()
+			cmd := m.goParent()
 			m.loadPreviewForSelected()
-			return nil
+			return cmd
 		case 'l':
 			entry := m.SelectedEntry()
 			if entry != nil {
 				if entry.IsDir {
-					m.navigateTo(entry.Path)
+					cmd := m.navigateTo(entry.Path)
 					m.loadPreviewForSelected()
-				} else {
-					return m.openInViewer(entry.Path)
+					return cmd
 				}
+				return m.openInViewer(entry.Path)
 			}
 			return nil
 		case 'g':
@@ -491,8 +494,9 @@ func (m *Model) handleKeyBookmarks(key tea.KeyMsg) tea.Cmd {
 			m.BookmarkIndex++
 		}
 	case tea.KeyEnter:
-		m.navigateToBookmark()
+		cmd := m.navigateToBookmark()
 		m.FocusedPanel = PanelFileList
+		return cmd
 	case tea.KeyEsc, tea.KeyTab:
 		m.FocusedPanel = PanelFileList
 	case tea.KeyRunes:
@@ -521,8 +525,10 @@ func (m *Model) handleKeyClipboardPanel(key tea.KeyMsg) tea.Cmd {
 		}
 	case tea.KeyEnter:
 		if m.PathClipboardIdx < len(m.PathClipboard) {
-			m.navigateTo(m.PathClipboard[m.PathClipboardIdx])
+			cmd := m.navigateTo(m.PathClipboard[m.PathClipboardIdx])
 			m.loadPreviewForSelected()
+			m.Mode = ModeFileList
+			return cmd
 		}
 		m.Mode = ModeFileList
 	case tea.KeyEsc:
@@ -554,6 +560,61 @@ func (m *Model) handleKeyClipboardPanel(key tea.KeyMsg) tea.Cmd {
 				m.Mode = ModeFileList
 			}
 		}
+	}
+	return nil
+}
+
+// handleKeyOpenChoice handles key events in the open-choice modal.
+func (m *Model) handleKeyOpenChoice(key tea.KeyMsg) tea.Cmd {
+	choiceCount := 2
+
+	switch key.Type {
+	case tea.KeyUp:
+		if m.OpenChoiceIndex > 0 {
+			m.OpenChoiceIndex--
+		}
+	case tea.KeyDown:
+		if m.OpenChoiceIndex < choiceCount-1 {
+			m.OpenChoiceIndex++
+		}
+	case tea.KeyEnter:
+		return m.executeOpenChoice()
+	case tea.KeyEsc:
+		m.Mode = ModeFileList
+	case tea.KeyRunes:
+		if len(key.Runes) > 0 {
+			switch key.Runes[0] {
+			case 'j':
+				if m.OpenChoiceIndex < choiceCount-1 {
+					m.OpenChoiceIndex++
+				}
+			case 'k':
+				if m.OpenChoiceIndex > 0 {
+					m.OpenChoiceIndex--
+				}
+			case 'q':
+				m.Mode = ModeFileList
+			}
+		}
+	}
+	return nil
+}
+
+// executeOpenChoice performs the selected action from the open-choice modal.
+func (m *Model) executeOpenChoice() tea.Cmd {
+	entry := m.SelectedEntry()
+	if entry == nil {
+		m.Mode = ModeFileList
+		return nil
+	}
+	path := entry.Path
+	m.Mode = ModeFileList
+
+	switch m.OpenChoiceIndex {
+	case 0:
+		return m.openWithDefaultApp(path)
+	case 1:
+		return m.openInVSCode(path)
 	}
 	return nil
 }

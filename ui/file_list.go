@@ -102,31 +102,22 @@ func RenderFileList(p *FileListParams) string {
 }
 
 // formatFileEntry formats a single file entry line for the list.
-// Layout: [gitMark(2)][icon][name ............ ][dim size(6)]
+// Layout: [icon(2)][name ............ ][dim size(6)]
+//
+// Nerd Font icons are assumed to occupy exactly 2 display columns each
+// (either a 2-wide glyph, or a 1-wide glyph + 1 trailing space).
+// Using a fixed iconDisplayW avoids runewidth mismatches with wide glyphs.
 func formatFileEntry(entry fs.FileEntry, width int, showIcons bool, gitMap map[string][2]byte, gitRoot string) string {
-	// Git marker: 2 cols only when a git repo is active; omitted otherwise.
-	gitMark := ""
-	gitMarkW := 0
-	if gitMap != nil && gitRoot != "" {
-		gitMarkW = 2
-		gitMark = "  "
-		rel := relPath(gitRoot, entry.Path)
-		if xy, ok := gitMap[rel]; ok {
-			gitMark = gitMarker(xy[0], xy[1])
-		}
-	}
-
-	// Icon
+	// Icon — fixed 2-column display budget regardless of glyph width.
 	icon := ""
+	const iconDisplayW = 2
 	if showIcons {
 		if entry.IsDir {
-			icon = " "
+			icon = " " // folder glyph is 2-wide; no trailing space needed
 		} else {
-			icon = fileIcon(entry.Name)
+			icon = fileIcon(entry.Name) + " " // 1-wide glyph + space
 		}
-		icon += " "
 	}
-	iconW := lipgloss.Width(icon)
 
 	// Size area: " 9.7M " — 6 cols reserved at the right end
 	const sizeW = 6
@@ -139,7 +130,11 @@ func formatFileEntry(entry fs.FileEntry, width int, showIcons bool, gitMap map[s
 	dimSize := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(rawSize)
 
 	// Name gets remaining width
-	nameAreaW := width - gitMarkW - iconW - sizeW
+	iconW := 0
+	if showIcons {
+		iconW = iconDisplayW
+	}
+	nameAreaW := width - iconW - sizeW
 	if nameAreaW < 1 {
 		nameAreaW = 1
 	}
@@ -148,20 +143,20 @@ func formatFileEntry(entry fs.FileEntry, width int, showIcons bool, gitMap map[s
 	var styledName string
 	switch {
 	case entry.IsDir:
-		styledName = icon + lipgloss.NewStyle().Foreground(ColorDirFg).Render(truncatedName)
+		styledName = lipgloss.NewStyle().Foreground(ColorDirFg).Render(truncatedName)
 	case entry.IsHidden:
-		styledName = icon + lipgloss.NewStyle().Faint(true).Render(truncatedName)
+		styledName = lipgloss.NewStyle().Faint(true).Render(truncatedName)
 	default:
-		styledName = icon + truncatedName
+		styledName = truncatedName
 	}
 
-	// Pad the name section to fill nameAreaW so size is flush-right
-	nameActualW := lipgloss.Width(styledName) - iconW
+	// Pad name to fill nameAreaW so size is flush-right
+	nameActualW := lipgloss.Width(styledName)
 	if nameActualW < nameAreaW {
 		styledName += strings.Repeat(" ", nameAreaW-nameActualW)
 	}
 
-	return gitMark + styledName + dimSize
+	return icon + styledName + dimSize
 }
 
 func gitMarker(x, y byte) string {

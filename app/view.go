@@ -88,18 +88,12 @@ func (m *Model) renderMainMode() string {
 	}
 
 	gitBranch := ""
+	gitDirty := false
 	if m.Git != nil && m.Git.Status != nil {
 		gitBranch = m.Git.Status.Branch
+		gitDirty = len(m.Git.Status.Staged) > 0 || len(m.Git.Status.Unstaged) > 0
 	}
-	tabBar := ui.RenderTabBar(m.CurrentDir, gitBranch, len(m.FilteredIndices), m.Width)
-
-	// Build git file map for markers
-	var gitFileMap map[string][2]byte
-	var gitRoot string
-	if m.Git != nil && m.Git.Status != nil {
-		gitFileMap = m.Git.Status.FileMap
-		gitRoot = m.Git.Status.Root
-	}
+	tabBar := ui.RenderTabBar(m.CurrentDir, gitBranch, gitDirty, len(m.FilteredIndices), m.Width)
 
 	// Determine preview lines for the panel
 	var previewLines []string
@@ -135,8 +129,8 @@ func (m *Model) renderMainMode() string {
 		ShowPathClipboard: false,
 		PathClipboard:     m.PathClipboard,
 		PathClipboardIdx:  m.PathClipboardIdx,
-		GitFileMap:        gitFileMap,
-		GitRoot:           gitRoot,
+		GitFileMap:        nil,
+		GitRoot:           "",
 		Config:            m.Config,
 		FileListHeightOut:  &m.FileListHeight,
 		ViewerHeightOut:    &m.ViewerHeight,
@@ -173,6 +167,14 @@ func (m *Model) renderMainMode() string {
 		return ui.PlaceOverlay(base, modal, m.Width, m.Height)
 	case ModeCommandPalette:
 		modal := ui.RenderPaletteOverlay("", nil, 0, m.Width, m.Height)
+		return ui.PlaceOverlay(base, modal, m.Width, m.Height)
+	case ModeOpenChoice:
+		entry := m.SelectedEntry()
+		name := ""
+		if entry != nil {
+			name = entry.Name
+		}
+		modal := ui.RenderOpenChoiceOverlay(m.OpenChoiceIndex, m.OpenChoiceIsDir, name, m.Width, m.Height)
 		return ui.PlaceOverlay(base, modal, m.Width, m.Height)
 	case ModeOpenWith:
 		openers := make([]string, len(m.Config.Openers))

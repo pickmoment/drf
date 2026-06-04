@@ -17,11 +17,12 @@ import (
 )
 
 // navigateTo changes the current directory and reloads the file list.
-func (m *Model) navigateTo(dir string) {
+// Git status is refreshed asynchronously; returns the async tea.Cmd.
+func (m *Model) navigateTo(dir string) tea.Cmd {
 	entries, err := fs.ListDir(dir)
 	if err != nil {
 		m.SetStatusError("디렉토리 접근 실패: " + err.Error())
-		return
+		return nil
 	}
 	m.CurrentDir = dir
 	m.FileEntries = entries
@@ -34,50 +35,64 @@ func (m *Model) navigateTo(dir string) {
 	}
 	m.PreviewScroll = 0
 	m.PreviewHScroll = 0
-	// Refresh git state for new directory
-	if m.Git != nil {
-		m.Git.Refresh(dir)
-		if m.Git.Status != nil {
-			m.Git.LoadDiff()
-		}
+	return gitRefreshAsync(dir)
+}
+
+// gitRefreshAsync runs git status in a goroutine and returns a tea.Cmd.
+func gitRefreshAsync(dir string) tea.Cmd {
+	return func() tea.Msg {
+		return gitStatusMsg{status: git.GetStatus(dir), dir: dir}
 	}
 }
 
 // goParent navigates to the parent directory.
-func (m *Model) goParent() {
+func (m *Model) goParent() tea.Cmd {
 	parent := filepath.Dir(m.CurrentDir)
 	if parent == m.CurrentDir {
-		return
+		return nil
 	}
-	// Try to select the directory we came from
 	prev := filepath.Base(m.CurrentDir)
-	m.navigateTo(parent)
-	// Find prev dir in new entries
+	cmd := m.navigateTo(parent)
 	for i, idx := range m.FilteredIndices {
 		if idx < len(m.FileEntries) && m.FileEntries[idx].Name == prev {
 			m.SelectedIndex = i
 			break
 		}
 	}
+	return cmd
 }
 
-// enterOrOpen enters a directory or opens a file in the viewer.
+// enterOrOpen shows the open choice dialog for the selected entry.
 func (m *Model) enterOrOpen() tea.Cmd {
 	entry := m.SelectedEntry()
 	if entry == nil {
 		return nil
 	}
-	if entry.IsDir {
-		m.navigateTo(entry.Path)
+	m.Mode = ModeOpenChoice
+	m.OpenChoiceIndex = 0
+	m.OpenChoiceIsDir = entry.IsDir
+	return nil
+}
+
+// openInVSCode opens a file or directory in VS Code.
+func (m *Model) openInVSCode(path string) tea.Cmd {
+	cmd := exec.Command("code", path)
+	if err := cmd.Start(); err != nil {
+		m.SetStatusError("VS Code 열기 실패: " + err.Error())
 		return nil
 	}
-	return m.openInViewer(entry.Path)
+	m.SetStatusSuccess("VS Code로 열었습니다")
+	return nil
 }
 
 // openInViewer opens a file in the fullscreen viewer.
 func (m *Model) openInViewer(path string) tea.Cmd {
 	entry, _ := fs.FromPath(path)
-	lines := m.buildPreviewLines(path, &entry)
+	maxWidth := 0
+	if m.PreviewWrap {
+		maxWidth = m.viewerContentWidth()
+	}
+	lines := m.buildPreviewLines(path, &entry, maxWidth)
 	m.Mode = ModeViewer
 	m.ViewerLines = lines
 	m.ViewerPath = path
@@ -162,11 +177,13 @@ func (m *Model) bookmarkDelete() {
 }
 
 // navigateToBookmark navigates to the currently selected bookmark.
-func (m *Model) navigateToBookmark() {
+func (m *Model) navigateToBookmark() tea.Cmd {
 	if m.BookmarkIndex < len(m.Config.Bookmarks) {
-		m.navigateTo(m.Config.Bookmarks[m.BookmarkIndex])
+		cmd := m.navigateTo(m.Config.Bookmarks[m.BookmarkIndex])
 		m.FocusedPanel = PanelFileList
+		return cmd
 	}
+	return nil
 }
 
 // togglePathClipboard adds or removes the selected path from the clipboard.
@@ -417,7 +434,7 @@ func readFileCapped(path string, maxSize int64) (string, error) {
 	return string(data), nil
 }
 
-// loadPreviewForSelected loads preview content for the selected file.
+// loadPreviewForSelected loads preview content for the selected file (preview panel).
 func (m *Model) loadPreviewForSelected() {
 	entry := m.SelectedEntry()
 	if entry == nil || entry.IsDir {
@@ -425,20 +442,28 @@ func (m *Model) loadPreviewForSelected() {
 		m.ViewerPath = ""
 		return
 	}
-	m.ViewerLines = m.buildPreviewLines(entry.Path, entry)
+	maxWidth := 0
+	if m.PreviewWrap {
+		maxWidth = m.previewContentWidth()
+	}
+	m.ViewerLines = m.buildPreviewLines(entry.Path, entry, maxWidth)
 	m.ViewerPath = entry.Path
 	m.PreviewScroll = 0
 	m.PreviewHScroll = 0
 }
 
 // reloadViewerLines re-renders the current viewer file (e.g. after wrap toggle),
-// preserving the scroll position.
+// preserving the scroll position. Uses the full viewer width, not the preview panel width.
 func (m *Model) reloadViewerLines() {
 	if m.ViewerPath == "" {
 		return
 	}
+	maxWidth := 0
+	if m.PreviewWrap {
+		maxWidth = m.viewerContentWidth()
+	}
 	scroll := m.PreviewScroll
-	m.ViewerLines = m.buildPreviewLines(m.ViewerPath, nil)
+	m.ViewerLines = m.buildPreviewLines(m.ViewerPath, nil, maxWidth)
 	m.PreviewScroll = scroll
 	if m.PreviewScroll >= len(m.ViewerLines) {
 		m.PreviewScroll = max(0, len(m.ViewerLines)-1)
@@ -447,7 +472,8 @@ func (m *Model) reloadViewerLines() {
 
 // buildPreviewLines detects file type, handles binary/non-previewable files,
 // and returns rendered lines for display in the preview panel or fullscreen viewer.
-func (m *Model) buildPreviewLines(path string, entry *fs.FileEntry) []string {
+// maxWidth: table column wrap limit (0 = unlimited).
+func (m *Model) buildPreviewLines(path string, entry *fs.FileEntry, maxWidth int) []string {
 	fileType, codeLang := DetectFileType(path)
 
 	// Non-text types: show rich file info without reading content
@@ -469,12 +495,6 @@ func (m *Model) buildPreviewLines(path string, entry *fs.FileEntry) []string {
 		return []string{"  파일을 읽을 수 없습니다: " + err.Error()}
 	}
 
-	// For wrap-aware table rendering: pass content width only when wrap is on.
-	maxWidth := 0
-	if m.PreviewWrap {
-		maxWidth = m.previewContentWidth()
-	}
-
 	return ui.RenderPreviewContent(
 		path, content,
 		int(fileType), string(codeLang),
@@ -494,7 +514,7 @@ func (m *Model) renderFileInfo(path string, entry *fs.FileEntry, fileType int) [
 	return []string{"  미리보기 불가 파일"}
 }
 
-// previewContentWidth returns the inner content width of the preview panel.
+// previewContentWidth returns the inner content width of the side preview panel.
 // Uses the stored value from the last rendered frame; estimates on first call.
 func (m *Model) previewContentWidth() int {
 	if m.PreviewContentWidth > 0 {
@@ -502,6 +522,16 @@ func (m *Model) previewContentWidth() int {
 	}
 	// Estimate: 65% of total width minus borders
 	w := m.Width*65/100 - 2
+	if w < 10 {
+		w = 10
+	}
+	return w
+}
+
+// viewerContentWidth returns the usable content width for the fullscreen viewer.
+// The viewer occupies the full terminal width minus the border.
+func (m *Model) viewerContentWidth() int {
+	w := m.Width - 2
 	if w < 10 {
 		w = 10
 	}

@@ -17,6 +17,7 @@ const (
 	AppModeGit           = 6
 	AppModeFileManager   = 7
 	AppModePathClipboard = 8
+	AppModeOpenChoice    = 9
 )
 
 type hintPair struct {
@@ -61,6 +62,10 @@ func getHints(mode, focusedPanel int, isSearching, isGitLog bool) []hintPair {
 	case AppModePathClipboard:
 		return []hintPair{
 			{"Enter", "이동"}, {"y", "복사"}, {"d", "삭제"}, {"Esc", "닫기"},
+		}
+	case AppModeOpenChoice:
+		return []hintPair{
+			{"Enter", "선택"}, {"↑↓", "이동"}, {"Esc", "취소"},
 		}
 	case AppModeOpenWith:
 		return []hintPair{
