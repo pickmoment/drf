@@ -1,0 +1,23 @@
+# 빌드 결과물
+/drf
+/drf.exe
+
+# Go 툴체인
+*.test
+*.out
+/vendor/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 에디터
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 런타임 생성 파일
+/dist/
