@@ -40,6 +40,15 @@ type CommitFileEntry struct {
 	Path   string
 }
 
+// LogEntry holds structured data for a single commit log entry.
+type LogEntry struct {
+	Hash      string // full 40-char hash
+	ShortHash string // abbreviated (7-char) hash
+	Date      string // YYYY-MM-DD
+	Author    string
+	Subject   string
+}
+
 type GitError struct{ Msg string }
 
 func (e *GitError) Error() string { return e.Msg }
@@ -246,17 +255,30 @@ func GetCommitFileDiff(root, hash, path string) []string {
 	return strings.Split(out, "\n")
 }
 
-func GetLog(root string) []string {
-	out, err := run(root, "log", "--oneline", "--decorate", "-20")
+func GetLog(root string) []LogEntry {
+	// Use unit-separator (0x1e) as field delimiter — safe in commit messages.
+	out, err := run(root, "log",
+		"--format=%H%x1e%h%x1e%ad%x1e%an%x1e%s",
+		"--date=short", "-50")
 	if err != nil {
 		return nil
 	}
-	lines := strings.Split(out, "\n")
-	var result []string
-	for _, l := range lines {
-		if l != "" {
-			result = append(result, l)
+	var result []LogEntry
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
 		}
+		parts := strings.SplitN(line, "\x1e", 5)
+		if len(parts) < 5 {
+			continue
+		}
+		result = append(result, LogEntry{
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Date:      parts[2],
+			Author:    parts[3],
+			Subject:   parts[4],
+		})
 	}
 	return result
 }
@@ -315,6 +337,22 @@ func DeleteBranch(root, name string, force bool) error {
 		flag = "-D"
 	}
 	_, stderr, err := runWithStderr(root, "branch", flag, name)
+	if err != nil {
+		return &GitError{Msg: stderr}
+	}
+	return nil
+}
+
+func StageAll(root string) error {
+	_, stderr, err := runWithStderr(root, "add", "-A")
+	if err != nil {
+		return &GitError{Msg: stderr}
+	}
+	return nil
+}
+
+func UnstageAll(root string) error {
+	_, stderr, err := runWithStderr(root, "restore", "--staged", ".")
 	if err != nil {
 		return &GitError{Msg: stderr}
 	}

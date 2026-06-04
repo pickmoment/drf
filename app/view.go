@@ -64,6 +64,11 @@ func (m *Model) renderGitMode() string {
 		Height:   m.Height,
 		GitState: m.Git,
 	}
+	if m.Status != nil && !m.Status.IsExpired() {
+		p.HasStatus = true
+		p.StatusText = m.Status.Text
+		p.StatusKind = int(m.Status.Kind)
+	}
 	return ui.RenderGit(p)
 }
 

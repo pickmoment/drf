@@ -3,7 +3,6 @@ package state
 import (
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/pickmoment/drf/git"
@@ -55,7 +54,7 @@ type GitState struct {
 	CommitInput  string
 
 	ShowLog        bool
-	Log            []string
+	Log            []git.LogEntry
 	LogFocused     bool
 	LogIdx         int
 	LogFileFocused bool
@@ -129,8 +128,7 @@ func (g *GitState) LoadCommitShow() {
 	if g.LogIdx >= len(g.Log) {
 		return
 	}
-	entry := g.Log[g.LogIdx]
-	hash := strings.Fields(entry)[0]
+	hash := g.Log[g.LogIdx].Hash
 	g.CommitFiles = git.GetCommitFiles(g.Status.Root, hash)
 	g.CommitFileIdx = 0
 	g.CommitShow = nil
@@ -141,8 +139,7 @@ func (g *GitState) LoadCommitFileDiff() {
 	if g.Status == nil || g.LogIdx >= len(g.Log) {
 		return
 	}
-	entry := g.Log[g.LogIdx]
-	hash := strings.Fields(entry)[0]
+	hash := g.Log[g.LogIdx].Hash
 	if g.CommitFileIdx >= len(g.CommitFiles) {
 		return
 	}

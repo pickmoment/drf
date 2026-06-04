@@ -1136,7 +1136,7 @@ func (m *Model) handleKeyGitFiles(key tea.KeyMsg) tea.Cmd {
 		case 'k':
 			m.gitMoveUp()
 		case 's':
-			// Stage selected unstaged file
+			// Stage selected file (unstaged section) or stage all unstaged (staged section).
 			if g.Section == state.GitSectionUnstaged && g.UnstagedIdx < len(g.Status.Unstaged) {
 				f := g.Status.Unstaged[g.UnstagedIdx]
 				if err := git.StageFile(root, f.Path); err != nil {
@@ -1144,15 +1144,17 @@ func (m *Model) handleKeyGitFiles(key tea.KeyMsg) tea.Cmd {
 				} else {
 					m.gitRefresh()
 				}
-			} else if g.Section == state.GitSectionStaged && g.StagedIdx < len(g.Status.Staged) {
-				// Stage all
-				for _, f := range g.Status.Staged {
-					_ = git.StageFile(root, f.Path)
+			} else if g.Section == state.GitSectionStaged {
+				// In staged section, 's' stages all remaining unstaged files.
+				if err := git.StageAll(root); err != nil {
+					m.SetStatusError("전체 스테이지 실패: " + err.Error())
+				} else {
+					m.SetStatusSuccess("전체 스테이지 완료")
+					m.gitRefresh()
 				}
-				m.gitRefresh()
 			}
 		case 'u':
-			// Unstage selected staged file
+			// Unstage selected staged file.
 			if g.Section == state.GitSectionStaged && g.StagedIdx < len(g.Status.Staged) {
 				f := g.Status.Staged[g.StagedIdx]
 				if err := git.UnstageFile(root, f.Path); err != nil {
@@ -1160,6 +1162,22 @@ func (m *Model) handleKeyGitFiles(key tea.KeyMsg) tea.Cmd {
 				} else {
 					m.gitRefresh()
 				}
+			}
+		case 'a':
+			// Stage all unstaged files.
+			if err := git.StageAll(root); err != nil {
+				m.SetStatusError("전체 스테이지 실패: " + err.Error())
+			} else {
+				m.SetStatusSuccess("전체 스테이지 완료")
+				m.gitRefresh()
+			}
+		case 'A':
+			// Unstage all staged files.
+			if err := git.UnstageAll(root); err != nil {
+				m.SetStatusError("전체 언스테이지 실패: " + err.Error())
+			} else {
+				m.SetStatusSuccess("전체 언스테이지 완료")
+				m.gitRefresh()
 			}
 		case 'c':
 			if len(g.Status.Staged) == 0 {
@@ -1169,18 +1187,18 @@ func (m *Model) handleKeyGitFiles(key tea.KeyMsg) tea.Cmd {
 				g.CommitInput = ""
 			}
 		case 'p':
-			// Push
-			g.Confirm = &state.ConfirmData{
-				Kind: state.ConfirmForcePush,
-				Name: g.Status.Branch,
-			}
-			// Actually just push without force prompt
-			g.Confirm = nil
+			// Regular push.
 			m.startGitAsync(state.AsyncData{
 				Kind:   state.AsyncPush,
 				Force:  false,
 				Branch: g.Status.Branch,
 			})
+		case 'F':
+			// Force push — requires confirmation.
+			g.Confirm = &state.ConfirmData{
+				Kind: state.ConfirmForcePush,
+				Name: g.Status.Branch,
+			}
 		case 'P':
 			m.startGitAsync(state.AsyncData{Kind: state.AsyncPull})
 		case 'f':

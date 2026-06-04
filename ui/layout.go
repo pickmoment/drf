@@ -698,14 +698,17 @@ func renderBox(title, content string, w, h int, borderColor lipgloss.Color) stri
 	bc := lipgloss.NewStyle().Foreground(borderColor)
 
 	// Top border with title
+	// Use lipgloss.Width so ANSI-decorated titles (e.g. with colour indicators)
+	// are measured correctly.
 	titleStr := ""
 	if title != "" {
 		titleStr = " " + title + " "
 	}
-	topLineLen := innerW - runewidth.StringWidth(titleStr)
+	topLineLen := innerW - lipgloss.Width(titleStr)
 	if topLineLen < 0 {
 		topLineLen = 0
-		titleStr = runewidth.Truncate(titleStr, innerW, "")
+		// Strip ANSI then truncate to avoid cutting inside an escape sequence.
+		titleStr = " " + truncateStr(stripANSI(title), innerW-2) + " "
 	}
 	leftLen := 0
 	rightLen := topLineLen

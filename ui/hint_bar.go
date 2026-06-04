@@ -46,14 +46,13 @@ func getHints(mode, focusedPanel int, isSearching, isGitLog bool) []hintPair {
 	case AppModeGit:
 		if isGitLog {
 			return []hintPair{
-				{"j/k", "이동"}, {"l", "파일목록"}, {"h", "뒤로"},
-				{"q", "종료"},
+				{"j/k", "이동"}, {"Tab/l", "패널전환"}, {"h", "뒤로"}, {"Enter", "전체화면"}, {"q", "닫기"},
 			}
 		}
 		return []hintPair{
-			{"s/u", "스테이지"}, {"c", "커밋"}, {"p", "푸시"},
-			{"P", "풀"}, {"f", "페치"}, {"L", "로그"}, {"b", "브랜치"},
-			{"q", "종료"},
+			{"s/u", "스테이지"}, {"a/A", "전체"}, {"r", "복원"}, {"c", "커밋"},
+			{"p", "푸시"}, {"F", "강제푸시"}, {"P", "풀"}, {"f", "페치"},
+			{"L", "로그"}, {"b", "브랜치"}, {"Tab", "전환"}, {"q", "닫기"},
 		}
 	case AppModeFileManager:
 		return []hintPair{
