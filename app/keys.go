@@ -7,6 +7,7 @@ import (
 	"github.com/pickmoment/drf/fs"
 	"github.com/pickmoment/drf/git"
 	"github.com/pickmoment/drf/state"
+	"github.com/pickmoment/drf/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -291,6 +292,10 @@ func (m *Model) handleKeyFileListRunes(key tea.KeyMsg) tea.Cmd {
 		m.Mode = ModeHelp
 	case 'q', 'Q':
 		m.ShouldQuit = true
+	case 'R':
+		m.refreshFileList()
+		m.loadPreviewForSelected()
+		m.SetStatusSuccess("파일 목록 갱신됨")
 	case '.':
 		m.Config.General.ShowHidden = !m.Config.General.ShowHidden
 		m.updateFilter()
@@ -332,16 +337,9 @@ func (m *Model) handleKeyViewer(key tea.KeyMsg) tea.Cmd {
 	case tea.KeyRight:
 		m.PreviewHScroll += 4
 	case tea.KeyPgUp:
-		m.PreviewScroll -= pageSize
-		if m.PreviewScroll < 0 {
-			m.PreviewScroll = 0
-		}
+		m.PreviewScroll = ui.PageUp(m.ViewerLines, m.PreviewScroll, pageSize, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case tea.KeyPgDown, tea.KeySpace:
-		m.PreviewScroll += pageSize
-		max := len(m.ViewerLines) - 1
-		if m.PreviewScroll > max {
-			m.PreviewScroll = max
-		}
+		m.PreviewScroll = ui.PageDown(m.ViewerLines, m.PreviewScroll, pageSize, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case tea.KeyEsc:
 		m.Mode = ModeFileList
 		m.clearViewerSearch()
@@ -439,25 +437,13 @@ func (m *Model) handleKeyViewerRunes(key tea.KeyMsg) tea.Cmd {
 	case 'G':
 		m.PreviewScroll = max(0, len(m.ViewerLines)-1)
 	case 'f':
-		m.PreviewScroll += pageSize
-		if m.PreviewScroll >= len(m.ViewerLines) {
-			m.PreviewScroll = max(0, len(m.ViewerLines)-1)
-		}
+		m.PreviewScroll = ui.PageDown(m.ViewerLines, m.PreviewScroll, pageSize, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case 'b':
-		m.PreviewScroll -= pageSize
-		if m.PreviewScroll < 0 {
-			m.PreviewScroll = 0
-		}
+		m.PreviewScroll = ui.PageUp(m.ViewerLines, m.PreviewScroll, pageSize, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case 'd':
-		m.PreviewScroll += pageSize / 2
-		if m.PreviewScroll >= len(m.ViewerLines) {
-			m.PreviewScroll = max(0, len(m.ViewerLines)-1)
-		}
+		m.PreviewScroll = ui.PageDown(m.ViewerLines, m.PreviewScroll, pageSize/2, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case 'u':
-		m.PreviewScroll -= pageSize / 2
-		if m.PreviewScroll < 0 {
-			m.PreviewScroll = 0
-		}
+		m.PreviewScroll = ui.PageUp(m.ViewerLines, m.PreviewScroll, pageSize/2, m.Width, m.PreviewWrap, m.PreviewLineNumbers)
 	case '/':
 		m.ViewerIsSearching = true
 		m.ViewerSearchQuery = ""

@@ -174,18 +174,20 @@ func New() (*Model, error) {
 		entries = []fs.FileEntry{}
 	}
 
-	filtered := makeRange(len(entries))
 	gitState := state.NewGitState(dir)
 
 	m := &Model{
-		CurrentDir:      dir,
-		FileEntries:     entries,
-		FilteredIndices: filtered,
-		Mode:            ModeFileList,
-		FocusedPanel:    PanelFileList,
-		Config:          cfg,
-		PreviewWrap:     cfg.Preview.Wrap,
-		Git:             gitState,
+		CurrentDir:   dir,
+		FileEntries:  entries,
+		Mode:         ModeFileList,
+		FocusedPanel: PanelFileList,
+		Config:       cfg,
+		PreviewWrap:  cfg.Preview.Wrap,
+		Git:          gitState,
+	}
+	m.FilteredIndices = makeRange(len(entries))
+	if !cfg.General.ShowHidden {
+		m.applyHiddenFilter()
 	}
 	return m, nil
 }

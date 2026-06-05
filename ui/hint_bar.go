@@ -92,7 +92,7 @@ func getHints(mode, focusedPanel int, isSearching, isGitLog bool) []hintPair {
 		default:
 			return []hintPair{
 				{"j/k", "이동"}, {"Enter", "열기"}, {"/", "검색"},
-				{"y", "경로복사"}, {"b", "즐겨찾기"}, {"g", "Git"}, {"?", "도움말"}, {"Q", "종료"},
+				{"y", "경로복사"}, {"b", "즐겨찾기"}, {"R", "갱신"}, {"g", "Git"}, {"?", "도움말"}, {"Q", "종료"},
 			}
 		}
 	}

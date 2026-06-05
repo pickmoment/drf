@@ -212,6 +212,95 @@ func renderTextFile(lines []string, scroll, hScroll int, wrap, lineNumbers bool,
 	return strings.Join(visible, "\n")
 }
 
+// PageDown returns the new logical-line scroll position after advancing contentH visual rows
+// from scroll. w is the full terminal width; the line-number gutter is subtracted internally.
+func PageDown(lines []string, scroll, contentH, w int, wrap, lineNumbers bool) int {
+	if len(lines) == 0 {
+		return 0
+	}
+	if !wrap {
+		next := scroll + contentH
+		if next >= len(lines) {
+			return max(0, len(lines)-1)
+		}
+		return next
+	}
+	lnW := 0
+	if lineNumbers {
+		lnW = len(fmt.Sprintf("%d", len(lines))) + 2
+	}
+	contentW := w - lnW
+	if contentW < 1 {
+		contentW = 1
+	}
+	lineNum := scroll
+	visual := 0
+	for lineNum < len(lines) && visual < contentH {
+		rawLine := lines[lineNum]
+		plain := sanitizeControlChars(expandTabs(stripANSI(rawLine), 4))
+		if startsWithBoxDrawing(plain) {
+			visual++
+		} else {
+			wrapped := wrapLineANSI(expandTabsANSI(rawLine, 4), contentW)
+			cnt := len(wrapped)
+			if cnt == 0 {
+				cnt = 1
+			}
+			visual += cnt
+		}
+		lineNum++
+	}
+	if lineNum >= len(lines) {
+		return max(0, len(lines)-1)
+	}
+	return lineNum
+}
+
+// PageUp returns the new logical-line scroll position after going back contentH visual rows
+// from scroll. w is the full terminal width; the line-number gutter is subtracted internally.
+func PageUp(lines []string, scroll, contentH, w int, wrap, lineNumbers bool) int {
+	if !wrap {
+		prev := scroll - contentH
+		if prev < 0 {
+			return 0
+		}
+		return prev
+	}
+	if scroll <= 0 {
+		return 0
+	}
+	lnW := 0
+	if lineNumbers {
+		lnW = len(fmt.Sprintf("%d", len(lines))) + 2
+	}
+	contentW := w - lnW
+	if contentW < 1 {
+		contentW = 1
+	}
+	visual := 0
+	lineNum := scroll - 1
+	for lineNum >= 0 {
+		rawLine := lines[lineNum]
+		plain := sanitizeControlChars(expandTabs(stripANSI(rawLine), 4))
+		var cnt int
+		if startsWithBoxDrawing(plain) {
+			cnt = 1
+		} else {
+			wrapped := wrapLineANSI(expandTabsANSI(rawLine, 4), contentW)
+			cnt = len(wrapped)
+			if cnt == 0 {
+				cnt = 1
+			}
+		}
+		if visual+cnt >= contentH {
+			return lineNum
+		}
+		visual += cnt
+		lineNum--
+	}
+	return 0
+}
+
 func renderHighlightedLine(line string, isCurrent bool) string {
 	if isCurrent {
 		return lipgloss.NewStyle().Background(lipgloss.Color("220")).Foreground(lipgloss.Color("0")).Render(line)
