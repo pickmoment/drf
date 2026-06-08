@@ -48,10 +48,17 @@ func ListDir(dir string) ([]FileEntry, error) {
 		if err != nil {
 			continue
 		}
+		isDir := e.IsDir()
+		if info.Mode()&os.ModeSymlink != 0 {
+			// 심볼릭 링크는 Stat으로 대상을 확인
+			if target, err := os.Stat(full); err == nil {
+				isDir = target.IsDir()
+			}
+		}
 		result = append(result, FileEntry{
 			Name:     e.Name(),
 			Path:     full,
-			IsDir:    e.IsDir(),
+			IsDir:    isDir,
 			Size:     info.Size(),
 			Modified: info.ModTime(),
 			IsHidden: strings.HasPrefix(e.Name(), "."),
