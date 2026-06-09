@@ -99,12 +99,12 @@ func renderFmInput(op int, input string, cursor int, srcPath, targetDir string, 
 	switch op {
 	case FmOpCopy:
 		title = "복사"
-		prompt = "복사 대상 경로:"
-		hint = "현재: " + srcPath
+		prompt = "대상 디렉토리:"
+		hint = "복사할 파일: " + srcPath
 	case FmOpMove:
 		title = "이동"
-		prompt = "이동 대상 경로:"
-		hint = "현재: " + srcPath
+		prompt = "대상 디렉토리:"
+		hint = "이동할 파일: " + srcPath
 	case FmOpRename:
 		title = "이름 변경"
 		prompt = "새 이름:"
@@ -143,7 +143,7 @@ func renderFmInput(op int, input string, cursor int, srcPath, targetDir string, 
 	sb.WriteString(prompt + "\n")
 	sb.WriteString(lipgloss.NewStyle().Foreground(ColorSearchFg).Render(displayInput))
 	sb.WriteString("\n\n")
-	sb.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: 확인  Esc: 취소"))
+	sb.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: 확인  Ctrl+V: 붙여넣기  Esc: 취소"))
 
 	style := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).

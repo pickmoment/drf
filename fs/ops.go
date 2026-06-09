@@ -112,7 +112,11 @@ func copyDirRecursive(src, dst string) error {
 	for _, e := range entries {
 		srcPath := filepath.Join(src, e.Name())
 		dstPath := filepath.Join(dst, e.Name())
-		if e.IsDir() {
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
 			if err := copyDirRecursive(srcPath, dstPath); err != nil {
 				return err
 			}

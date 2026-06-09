@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/pickmoment/drf/fs"
@@ -1390,6 +1391,11 @@ func (m *Model) handleKeyFmInput(key tea.KeyMsg) tea.Cmd {
 		m.FmOperation = nil
 		m.FmInput = ""
 		m.FmCursor = 0
+	case tea.KeyCtrlV:
+		if text, err := readFromClipboard(); err == nil && text != "" {
+			m.FmInput = text
+			m.FmCursor = len([]rune(text))
+		}
 	case tea.KeyBackspace:
 		if m.FmCursor > 0 {
 			runes := []rune(m.FmInput)
@@ -1430,7 +1436,7 @@ func (m *Model) executeFmOperation() {
 
 	switch op {
 	case FmOpCopy:
-		dst := m.FmInput
+		dst := filepath.Join(m.FmInput, filepath.Base(src))
 		if err := copyWithOverwriteCheck(src, dst, m); err != nil {
 			m.FmError = err.Error()
 		} else {
@@ -1440,7 +1446,7 @@ func (m *Model) executeFmOperation() {
 			m.FmOperation = nil
 		}
 	case FmOpMove:
-		dst := m.FmInput
+		dst := filepath.Join(m.FmInput, filepath.Base(src))
 		if err := moveWithOverwriteCheck(src, dst, m); err != nil {
 			m.FmError = err.Error()
 		} else {

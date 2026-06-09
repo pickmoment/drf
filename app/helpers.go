@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -385,6 +386,27 @@ func (m *Model) writeToClipboard(text string) {
 		return
 	}
 	m.SetStatusSuccess("클립보드에 복사됨")
+}
+
+func readFromClipboard() (string, error) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbpaste")
+	case "linux":
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-out")
+		} else {
+			cmd = exec.Command("xsel", "--clipboard", "--output")
+		}
+	default:
+		return "", fmt.Errorf("클립보드 지원 안됨")
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(out), "\n"), nil
 }
 
 // copyDragSelection handles mouse drag text selection copy.
