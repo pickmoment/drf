@@ -1439,7 +1439,7 @@ func (m *Model) executeFmOperation() {
 		dst := filepath.Join(m.FmInput, filepath.Base(src))
 		if err := copyWithOverwriteCheck(src, dst, m); err != nil {
 			m.FmError = err.Error()
-		} else {
+		} else if m.FmOverwriteTarget == "" {
 			m.SetStatusSuccess("복사 완료")
 			m.fmRefreshFileList()
 			m.Mode = ModeFileList
@@ -1449,7 +1449,7 @@ func (m *Model) executeFmOperation() {
 		dst := filepath.Join(m.FmInput, filepath.Base(src))
 		if err := moveWithOverwriteCheck(src, dst, m); err != nil {
 			m.FmError = err.Error()
-		} else {
+		} else if m.FmOverwriteTarget == "" {
 			m.SetStatusSuccess("이동 완료")
 			m.fmRefreshFileList()
 			m.Mode = ModeFileList
